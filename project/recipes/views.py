@@ -5,6 +5,8 @@ from rest_framework.permissions import IsAuthenticatedOrReadOnly, IsAuthenticate
 from rest_framework.authentication import TokenAuthentication
 from .models import Category, Recipe, Review, Favorite
 from .serializers import CategorySerializer, RecipeSerializer, ReviewSerializer, FavoriteSerializer
+from django.db.models import Avg
+from rest_framework.permissions import AllowAny
 
 @api_view(['GET', 'POST'])
 @authentication_classes([TokenAuthentication])
@@ -95,3 +97,20 @@ def manage_favorite(request, recipe_pk):
             fav.delete()
             return Response(status=status.HTTP_204_NO_CONTENT)
         return Response(status=status.HTTP_404_NOT_FOUND)
+    
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def top_recipes(request):
+    recipes = Recipe.objects.annotate(average_rating=Avg('reviews__rating')).order_by('-average_rating')[:3]
+    serializer = RecipeSerializer(recipes, many=True)
+    return Response(serializer.data)
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def search_recipes(request):
+    query = request.query_params.get('q')
+    if query:
+        recipes = Recipe.objects.filter(ingredients__icontains=query)
+        serializer = RecipeSerializer(recipes, many=True)
+        return Response(serializer.data)
+    return Response({"message": "No query provided"}, status=status.HTTP_400_BAD_REQUEST)
