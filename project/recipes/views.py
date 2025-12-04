@@ -1,12 +1,11 @@
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes, authentication_classes
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticatedOrReadOnly, IsAuthenticated
+from rest_framework.permissions import IsAuthenticatedOrReadOnly, IsAuthenticated, AllowAny
 from rest_framework.authentication import TokenAuthentication
+from django.db.models import Avg
 from .models import Category, Recipe, Review, Favorite
 from .serializers import CategorySerializer, RecipeSerializer, ReviewSerializer, FavoriteSerializer
-from django.db.models import Avg
-from rest_framework.permissions import AllowAny
 
 @api_view(['GET', 'POST'])
 @authentication_classes([TokenAuthentication])
@@ -46,14 +45,11 @@ def recipe_detail(request, pk):
         recipe = Recipe.objects.get(pk=pk)
     except Recipe.DoesNotExist:
         return Response(status=status.HTTP_404_NOT_FOUND)
-
     if request.method == 'GET':
         serializer = RecipeSerializer(recipe)
         return Response(serializer.data)
-
     if recipe.author != request.user:
         return Response(status=status.HTTP_403_FORBIDDEN)
-
     if request.method == 'PUT':
         serializer = RecipeSerializer(recipe, data=request.data)
         if serializer.is_valid():
@@ -63,7 +59,7 @@ def recipe_detail(request, pk):
     elif request.method == 'DELETE':
         recipe.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
-    
+
 @api_view(['POST'])
 @authentication_classes([TokenAuthentication])
 @permission_classes([IsAuthenticated])
@@ -77,6 +73,29 @@ def add_review(request, recipe_pk):
         serializer.save(user=request.user, recipe=recipe)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+@api_view(['GET', 'PUT', 'DELETE'])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
+def review_detail(request, pk):
+    try:
+        review = Review.objects.get(pk=pk)
+    except Review.DoesNotExist:
+        return Response(status=status.HTTP_404_NOT_FOUND)
+    if review.user != request.user:
+        return Response(status=status.HTTP_403_FORBIDDEN)
+    if request.method == 'GET':
+        serializer = ReviewSerializer(review)
+        return Response(serializer.data)
+    elif request.method == 'PUT':
+        serializer = ReviewSerializer(review, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    elif request.method == 'DELETE':
+        review.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 @api_view(['POST', 'DELETE'])
 @authentication_classes([TokenAuthentication])
@@ -97,7 +116,7 @@ def manage_favorite(request, recipe_pk):
             fav.delete()
             return Response(status=status.HTTP_204_NO_CONTENT)
         return Response(status=status.HTTP_404_NOT_FOUND)
-    
+
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def top_recipes(request):
