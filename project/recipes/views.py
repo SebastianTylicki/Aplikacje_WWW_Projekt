@@ -16,6 +16,8 @@ def category_list(request):
         serializer = CategorySerializer(categories, many=True)
         return Response(serializer.data)
     elif request.method == 'POST':
+        if not request.user.is_staff:
+             return Response({"error": "Only admin can add categories"}, status=status.HTTP_403_FORBIDDEN)
         serializer = CategorySerializer(data=request.data)
         if serializer.is_valid():
             serializer.save()
@@ -31,6 +33,8 @@ def recipe_list(request):
         serializer = RecipeSerializer(recipes, many=True)
         return Response(serializer.data)
     elif request.method == 'POST':
+        if not request.user.is_authenticated:
+            return Response(status=status.HTTP_401_UNAUTHORIZED)
         serializer = RecipeSerializer(data=request.data)
         if serializer.is_valid():
             serializer.save(author=request.user)
@@ -45,11 +49,14 @@ def recipe_detail(request, pk):
         recipe = Recipe.objects.get(pk=pk)
     except Recipe.DoesNotExist:
         return Response(status=status.HTTP_404_NOT_FOUND)
+
     if request.method == 'GET':
         serializer = RecipeSerializer(recipe)
         return Response(serializer.data)
+
     if recipe.author != request.user:
-        return Response(status=status.HTTP_403_FORBIDDEN)
+        return Response({"error": "You are not the author"}, status=status.HTTP_403_FORBIDDEN)
+
     if request.method == 'PUT':
         serializer = RecipeSerializer(recipe, data=request.data)
         if serializer.is_valid():
@@ -68,6 +75,10 @@ def add_review(request, recipe_pk):
         recipe = Recipe.objects.get(pk=recipe_pk)
     except Recipe.DoesNotExist:
         return Response(status=status.HTTP_404_NOT_FOUND)
+    
+    if Review.objects.filter(user=request.user, recipe=recipe).exists():
+        return Response({"message": "You already reviewed this recipe"}, status=status.HTTP_400_BAD_REQUEST)
+
     serializer = ReviewSerializer(data=request.data)
     if serializer.is_valid():
         serializer.save(user=request.user, recipe=recipe)
@@ -82,12 +93,15 @@ def review_detail(request, pk):
         review = Review.objects.get(pk=pk)
     except Review.DoesNotExist:
         return Response(status=status.HTTP_404_NOT_FOUND)
-    if review.user != request.user:
-        return Response(status=status.HTTP_403_FORBIDDEN)
+    
     if request.method == 'GET':
         serializer = ReviewSerializer(review)
         return Response(serializer.data)
-    elif request.method == 'PUT':
+
+    if review.user != request.user:
+        return Response(status=status.HTTP_403_FORBIDDEN)
+
+    if request.method == 'PUT':
         serializer = ReviewSerializer(review, data=request.data, partial=True)
         if serializer.is_valid():
             serializer.save()
@@ -116,6 +130,15 @@ def manage_favorite(request, recipe_pk):
             fav.delete()
             return Response(status=status.HTTP_204_NO_CONTENT)
         return Response(status=status.HTTP_404_NOT_FOUND)
+
+@api_view(['GET'])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
+def user_favorites(request):
+    favorites = Favorite.objects.filter(user=request.user)
+    recipes = [fav.recipe for fav in favorites]
+    serializer = RecipeSerializer(recipes, many=True)
+    return Response(serializer.data)
 
 @api_view(['GET'])
 @permission_classes([AllowAny])

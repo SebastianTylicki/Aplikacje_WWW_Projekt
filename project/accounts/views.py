@@ -38,7 +38,8 @@ def login_user(request):
     user = authenticate(username=username, password=password)
     
     if user:
-        token, created = Token.objects.get_or_create(user=user)
+        Token.objects.filter(user=user).delete()
+        token = Token.objects.create(user=user)
         return Response({'token': token.key})
     else:
         return Response({'error': 'Invalid credentials'}, status=status.HTTP_400_BAD_REQUEST)
